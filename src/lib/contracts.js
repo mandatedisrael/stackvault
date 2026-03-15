@@ -87,13 +87,30 @@ export function extractTuple(cv) {
     return extractTuple(cv.value)
   }
   if (cv.type === ClarityType.Tuple) {
-    const out = {}
-    for (const [key, val] of Object.entries(cv.data)) {
-      out[key] = extractUint(val)
+    // v7 may use cv.data or cv.value (object of ClarityValues)
+    const tupleData = cv.data || cv.value
+    if (tupleData && typeof tupleData === 'object') {
+      const out = {}
+      for (const [key, val] of Object.entries(tupleData)) {
+        out[key] = extractUint(val)
+      }
+      return out
     }
-    return out
   }
-  return cvToJSON(cv)
+  // Fallback: use cvToJSON
+  try {
+    const json = cvToJSON(cv)
+    if (json?.value && typeof json.value === 'object') {
+      const out = {}
+      for (const [key, val] of Object.entries(json.value)) {
+        out[key] = BigInt(val?.value ?? val ?? 0)
+      }
+      return out
+    }
+    return json
+  } catch {
+    return {}
+  }
 }
 
 // ---------------------------------------------------------------------------

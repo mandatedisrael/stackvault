@@ -268,16 +268,25 @@ function RepayTab() {
 
 function WithdrawTab() {
   const [amount, setAmount] = useState('')
-  const { userShares, userAssetValue, sharePrice, withdraw, txStatus, clearStatus } = useVault()
+  const { userShares, userAssetValue, sharePrice, tvl, withdraw, txStatus, clearStatus } = useVault()
 
   const hasPosition = userAssetValue > 0n
+
+  // Rate limit: max 10% of TVL per epoch
+  const maxWithdrawable = tvl > 0n ? tvl / 10n : 0n
+  // Cap at user's own position
+  const effectiveMax = hasPosition
+    ? (maxWithdrawable < userAssetValue ? maxWithdrawable : userAssetValue)
+    : 0n
 
   // Convert input sBTC amount to shares
   const amountSats = Math.floor(parseFloat(amount || '0') * 1e8)
   const sharesToBurn = amountSats > 0 && sharePrice > 0n
     ? (BigInt(amountSats) * BigInt(PRECISION)) / sharePrice
     : 0n
-  const isValid = sharesToBurn > 0n && sharesToBurn <= userShares
+
+  const overLimit = BigInt(amountSats) > effectiveMax && amountSats > 0
+  const isValid = sharesToBurn > 0n && sharesToBurn <= userShares && !overLimit
 
   const handleWithdraw = () => {
     if (!isValid) return
@@ -285,7 +294,7 @@ function WithdrawTab() {
   }
 
   const handleMax = () => {
-    setAmount(formatSbtc(userAssetValue))
+    setAmount(formatSbtc(effectiveMax))
   }
 
   return (
@@ -316,6 +325,11 @@ function WithdrawTab() {
           <span>Deposited: {formatSbtc(userAssetValue)} sBTC</span>
           <button onClick={handleMax} className="font-bold text-brand-teal hover:underline">MAX</button>
         </div>
+        {overLimit && (
+          <p className="mt-1 text-xs font-bold text-red-500">
+            Exceeds rate limit. Max withdrawable this epoch: {formatSbtc(effectiveMax)} sBTC
+          </p>
+        )}
       </div>
 
       {hasPosition && (

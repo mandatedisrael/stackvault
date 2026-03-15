@@ -123,7 +123,8 @@ export function useContractData(stxAddress) {
       let sbtcBalance = 0n, stxBalance = 0n
 
       if (stxAddress) {
-        const position = extractTuple(getValue(4))
+        const positionCV = getValue(4)
+        const position = extractTuple(positionCV)
         userShares = position.shares ?? 0n
         userAssetValue = position['asset-value'] ?? 0n
         userDeposited = position.deposited ?? 0n

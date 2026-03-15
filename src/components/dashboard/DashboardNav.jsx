@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom'
+import { useWallet } from '../../context/WalletContext'
 
 export default function DashboardNav() {
+  const { isConnected, isConnecting, shortAddress, connect, disconnect } = useWallet()
+
   return (
     <nav className="bg-brand-bg border-b-[3px] border-brand-slate sticky top-0 z-50">
       <div className="max-w-[1400px] mx-auto px-6 h-20 flex justify-between items-center">
@@ -24,14 +27,39 @@ export default function DashboardNav() {
 
         {/* Right: balance + wallet */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex flex-col items-end">
-            <span className="text-[10px] font-extrabold text-brand-slate/50 tracking-widest uppercase">sBTC Balance</span>
-            <span className="font-mono font-bold text-brand-slate">0.00000000</span>
-          </div>
-          <button className="bg-brand-yellow text-brand-slate neo-button rounded-xl px-5 py-2.5 font-display font-bold text-base flex items-center gap-2 hover:bg-[#F9C36B]">
-            <i className="ph-bold ph-wallet text-lg"></i>
-            Connect Wallet
-          </button>
+          {isConnected && (
+            <div className="hidden sm:flex flex-col items-end">
+              <span className="text-[10px] font-extrabold text-brand-slate/50 tracking-widest uppercase">sBTC Balance</span>
+              <span className="font-mono font-bold text-brand-slate">0.00000000</span>
+            </div>
+          )}
+
+          {isConnected ? (
+            <div className="flex items-center gap-2">
+              {/* Address pill */}
+              <div className="hidden sm:flex items-center gap-2 bg-white border-[3px] border-brand-slate rounded-xl px-4 py-2.5 shadow-solid-sm">
+                <div className="w-2 h-2 rounded-full bg-brand-teal"></div>
+                <span className="font-mono font-bold text-sm text-brand-slate">{shortAddress}</span>
+              </div>
+              {/* Disconnect */}
+              <button
+                onClick={disconnect}
+                className="bg-white text-brand-slate neo-button rounded-xl px-4 py-2.5 font-display font-bold text-sm flex items-center gap-2 hover:bg-red-50 hover:text-red-500 hover:border-red-500 transition-colors"
+              >
+                <i className="ph-bold ph-sign-out text-base"></i>
+                <span className="hidden sm:inline">Disconnect</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={connect}
+              disabled={isConnecting}
+              className="bg-brand-yellow text-brand-slate neo-button rounded-xl px-5 py-2.5 font-display font-bold text-base flex items-center gap-2 hover:bg-[#F9C36B] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <i className="ph-bold ph-wallet text-lg"></i>
+              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+            </button>
+          )}
         </div>
 
       </div>

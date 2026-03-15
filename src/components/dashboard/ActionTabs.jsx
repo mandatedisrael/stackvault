@@ -7,11 +7,12 @@ function DepositTab() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <label className="block text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-2">
+        <label htmlFor="deposit-amount" className="block text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-2">
           Amount to Deposit
         </label>
         <div className="flex items-center border-[3px] border-brand-slate rounded-2xl bg-white overflow-hidden focus-within:shadow-solid transition-all">
           <input
+            id="deposit-amount"
             type="number"
             placeholder="0.00000000"
             value={amount}
@@ -64,10 +65,11 @@ function BorrowTab() {
     <div className="flex flex-col gap-5">
       <div>
         <div className="flex justify-between items-center mb-2">
-          <label className="text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase">Borrow LTV</label>
+          <label htmlFor="borrow-ltv" className="text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase">Borrow LTV</label>
           <span className={`font-mono font-bold text-lg ${textColor}`}>{ltv}%</span>
         </div>
         <input
+          id="borrow-ltv"
           type="range"
           min={0}
           max={85}
@@ -118,11 +120,12 @@ function RepayTab() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <label className="block text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-2">
+        <label htmlFor="repay-amount" className="block text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-2">
           Amount to Repay
         </label>
         <div className="flex items-center border-[3px] border-brand-slate rounded-2xl bg-white overflow-hidden focus-within:shadow-solid transition-all">
           <input
+            id="repay-amount"
             type="number"
             placeholder="0.00"
             value={amount}
@@ -163,11 +166,12 @@ function WithdrawTab() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <label className="block text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-2">
+        <label htmlFor="withdraw-amount" className="block text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-2">
           Amount to Withdraw
         </label>
         <div className="flex items-center border-[3px] border-brand-slate rounded-2xl bg-white overflow-hidden focus-within:shadow-solid transition-all">
           <input
+            id="withdraw-amount"
             type="number"
             placeholder="0.00000000"
             value={amount}

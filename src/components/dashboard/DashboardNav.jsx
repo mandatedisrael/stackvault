@@ -44,6 +44,7 @@ export default function DashboardNav() {
               {/* Disconnect */}
               <button
                 onClick={disconnect}
+                aria-label="Disconnect wallet"
                 className="bg-white text-brand-slate neo-button rounded-xl px-4 py-2.5 font-display font-bold text-sm flex items-center gap-2 hover:bg-red-50 hover:text-red-500 hover:border-red-500 transition-colors"
               >
                 <i className="ph-bold ph-sign-out text-base"></i>

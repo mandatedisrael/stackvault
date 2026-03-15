@@ -1,0 +1,40 @@
+[project]
+name = "stackvault"
+description = "StackVault — non-custodial sBTC vault aggregator chaining StackingDAO + Zest Protocol + USDCx"
+authors = ["mandatedisrael"]
+telemetry = false
+cache_dir = "./.cache"
+
+[contracts.sbtc-token]
+path = "contracts/sbtc-token-mock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.vault-math]
+path = "contracts/vault-math.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.vault-oracle]
+path = "contracts/vault-oracle.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.vault-dao]
+path = "contracts/vault-dao.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.vault-timelock]
+path = "contracts/vault-timelock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.vault-aggregator]
+path = "contracts/vault-aggregator.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }

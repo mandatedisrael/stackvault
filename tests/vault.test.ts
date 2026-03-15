@@ -432,13 +432,10 @@ describe("vault-aggregator", () => {
     expect(result).toBeErr(Cl.uint(109)); // ERR-SLIPPAGE
   });
 
-  it("withdraw: after deposit, wallet1 can withdraw within rate limit", () => {
+  it("withdraw: partial withdrawal succeeds with correct fee deduction", () => {
     const amount = ONE_SBTC;
-    // deposit first
     simnet.callPublicFn(VAULT, "deposit", [Cl.uint(amount), Cl.uint(0n), sbtcContract], wallet1);
 
-    // Epoch limit = 10% of TVL = 0.1 sBTC = 10_000_000 sats
-    // Withdraw 5% (5_000_000 sats) to stay within limit
     const withdrawShares = 5_000_000n;
 
     const { result } = simnet.callPublicFn(
@@ -450,23 +447,28 @@ describe("vault-aggregator", () => {
     // net-assets = 5_000_000 - 0.5% fee (25_000) = 4_975_000
     expect(result).toBeOk(Cl.uint(4_975_000n));
 
-    // shares should be reduced
     const sharesAfter = simnet.callReadOnlyFn(VAULT, "get-shares", [Cl.principal(wallet1)], deployer);
     expect(sharesAfter.result).toBeUint(amount - withdrawShares);
   });
 
-  it("withdraw: 100% withdrawal triggers rate limiter (ERR-WITHDRAWAL-LIMIT)", () => {
+  it("withdraw: 100% withdrawal succeeds (no rate limit)", () => {
     const amount = ONE_SBTC;
     simnet.callPublicFn(VAULT, "deposit", [Cl.uint(amount), Cl.uint(0n), sbtcContract], wallet1);
 
-    // Try to withdraw all shares (100% > 10% epoch limit)
     const { result } = simnet.callPublicFn(
       VAULT,
       "withdraw",
       [Cl.uint(amount), Cl.uint(0n), sbtcContract],
       wallet1
     );
-    expect(result).toBeErr(Cl.uint(107)); // ERR-WITHDRAWAL-LIMIT
+    // net-assets = 100_000_000 - 0.5% fee (500_000) = 99_500_000
+    expect(result).toBeOk(Cl.uint(99_500_000n));
+
+    const sharesAfter = simnet.callReadOnlyFn(VAULT, "get-shares", [Cl.principal(wallet1)], deployer);
+    expect(sharesAfter.result).toBeUint(0n);
+
+    const totalAssets = simnet.callReadOnlyFn(VAULT, "get-total-assets", [], deployer);
+    expect(totalAssets.result).toBeUint(0n);
   });
 
   it("withdraw: cannot withdraw more shares than owned", () => {

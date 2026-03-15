@@ -50,12 +50,11 @@ function TxStatusBanner({ txStatus, clearStatus }) {
 
 function DepositTab() {
   const [amount, setAmount] = useState('')
-  const { sbtcBalance, sharePrice, deposit, txStatus, clearStatus, loading } = useVault()
+  const { sbtcBalance, sharePrice, deposit, txStatus, clearStatus } = useVault()
 
   const amountSats = Math.floor(parseFloat(amount || '0') * 1e8)
   const isValid = amountSats > 0 && BigInt(amountSats) <= sbtcBalance
 
-  // Estimate shares to receive
   const estimatedShares = amountSats > 0 && sharePrice > 0n
     ? (BigInt(amountSats) * BigInt(PRECISION)) / sharePrice
     : 0n
@@ -99,7 +98,6 @@ function DepositTab() {
         </div>
       </div>
 
-      {/* Preview */}
       <div className="bg-brand-bg border-[3px] border-brand-slate rounded-2xl p-4 space-y-2">
         <p className="text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-3">You will receive</p>
         <div className="flex justify-between font-semibold text-sm">
@@ -182,7 +180,6 @@ function BorrowTab() {
         </div>
       </div>
 
-      {/* Preview */}
       <div className="bg-brand-bg border-[3px] border-brand-slate rounded-2xl p-4 space-y-2">
         <p className="text-xs font-extrabold text-brand-slate/50 tracking-widest uppercase mb-3">Borrow Summary</p>
         <div className="flex justify-between font-semibold text-sm">
@@ -201,7 +198,6 @@ function BorrowTab() {
         </div>
       </div>
 
-      {/* LTV visual bar */}
       <div className="w-full h-3 bg-brand-beige border-[3px] border-brand-slate rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-300 ${ltvColor}`} style={{ width: `${(ltv / 85) * 100}%` }}></div>
       </div>
@@ -268,33 +264,24 @@ function RepayTab() {
 
 function WithdrawTab() {
   const [amount, setAmount] = useState('')
-  const { userShares, userAssetValue, sharePrice, tvl, withdraw, txStatus, clearStatus } = useVault()
+  const { userShares, userAssetValue, sharePrice, withdraw, txStatus, clearStatus } = useVault()
 
   const hasPosition = userAssetValue > 0n
 
-  // Rate limit: max 10% of TVL per epoch
-  const maxWithdrawable = tvl > 0n ? tvl / 10n : 0n
-  // Cap at user's own position
-  const effectiveMax = hasPosition
-    ? (maxWithdrawable < userAssetValue ? maxWithdrawable : userAssetValue)
-    : 0n
-
-  // Convert input sBTC amount to shares
   const amountSats = Math.floor(parseFloat(amount || '0') * 1e8)
   const sharesToBurn = amountSats > 0 && sharePrice > 0n
     ? (BigInt(amountSats) * BigInt(PRECISION)) / sharePrice
     : 0n
 
-  const overLimit = BigInt(amountSats) > effectiveMax && amountSats > 0
-  const isValid = sharesToBurn > 0n && sharesToBurn <= userShares && !overLimit
+  const isValid = sharesToBurn > 0n && sharesToBurn <= userShares
 
   const handleWithdraw = () => {
     if (!isValid) return
-    withdraw(sharesToBurn, BigInt(Math.floor(amountSats * 0.99))) // 1% slippage tolerance
+    withdraw(sharesToBurn, BigInt(Math.floor(amountSats * 0.99)))
   }
 
   const handleMax = () => {
-    setAmount(formatSbtc(effectiveMax))
+    setAmount(formatSbtc(userAssetValue))
   }
 
   return (
@@ -325,21 +312,7 @@ function WithdrawTab() {
           <span>Deposited: {formatSbtc(userAssetValue)} sBTC</span>
           <button onClick={handleMax} className="font-bold text-brand-teal hover:underline">MAX</button>
         </div>
-        {overLimit && (
-          <p className="mt-1 text-xs font-bold text-red-500">
-            Exceeds rate limit. Max withdrawable this epoch: {formatSbtc(effectiveMax)} sBTC
-          </p>
-        )}
       </div>
-
-      {hasPosition && (
-        <div className="bg-amber-50 border-[3px] border-brand-yellow rounded-2xl p-4 flex gap-3">
-          <i className="ph-bold ph-warning text-brand-yellow text-xl flex-shrink-0 mt-0.5"></i>
-          <p className="text-sm font-semibold text-brand-slate/80">
-            Withdrawals are rate-limited to 10% of TVL per epoch (~1 day) to protect the vault.
-          </p>
-        </div>
-      )}
 
       <button
         onClick={handleWithdraw}
@@ -367,7 +340,6 @@ export default function ActionTabs() {
 
   return (
     <div className="neo-card p-6">
-      {/* Tab bar */}
       <div className="flex border-[3px] border-brand-slate rounded-2xl overflow-hidden mb-6">
         {TABS.map((tab, i) => (
           <button
@@ -385,7 +357,6 @@ export default function ActionTabs() {
         ))}
       </div>
 
-      {/* Tab content */}
       {active === 'Deposit'  && <DepositTab />}
       {active === 'Borrow'   && <BorrowTab />}
       {active === 'Repay'    && <RepayTab />}

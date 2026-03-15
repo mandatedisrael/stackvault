@@ -1,17 +1,9 @@
-;; ============================================================
 ;; STACKVAULT - vault-timelock.clar
 ;; All sensitive parameter changes must be queued here first.
 ;; After the delay passes, the owner may execute them.
-;; Prevents flash-governance attacks.
-;; ============================================================
-
-;; ============================================================
-;; CONSTANTS
-;; ============================================================
 
 (define-constant CONTRACT-OWNER tx-sender)
 
-;; Error codes
 (define-constant ERR-NOT-AUTHORIZED   (err u500))
 (define-constant ERR-NOT-QUEUED       (err u501))
 (define-constant ERR-NOT-READY        (err u502))
@@ -21,57 +13,33 @@
 (define-constant ERR-ZERO-DELAY       (err u506))
 (define-constant ERR-DELAY-TOO-SHORT  (err u507))
 
-;; Minimum delay: ~24 hours (144 blocks at ~10 min/block)
 (define-constant MIN-DELAY u144)
-
-;; Maximum delay: ~14 days (2016 blocks)
 (define-constant MAX-DELAY u2016)
-
-;; Grace period: how long after ready-at can an operation be executed
-;; before it expires. ~1 day = 144 blocks.
 (define-constant GRACE-PERIOD u144)
 
-;; ============================================================
-;; DATA VARS
-;; ============================================================
-
-;; Default delay used when queueing if caller passes u0
 (define-data-var default-delay uint MIN-DELAY)
-
-;; Nonce for unique operation IDs
 (define-data-var op-nonce uint u0)
 
-;; ============================================================
-;; DATA MAPS
-;; ============================================================
-
-;; Timelock operations
 (define-map operations
-  uint  ;; operation-id
+  uint
   {
-    action: (string-ascii 64),     ;; e.g. "set-fee-bps", "set-paused"
-    target: principal,             ;; contract or principal being changed
-    value: uint,                   ;; new parameter value
-    queued-at: uint,               ;; block height when queued
-    ready-at: uint,                ;; queued-at + delay
+    action: (string-ascii 64),
+    target: principal,
+    value: uint,
+    queued-at: uint,
+    ready-at: uint,
     executed: bool,
     cancelled: bool,
     proposer: principal
   }
 )
 
-;; Index by action+target for deduplication (prevent double-queue)
-;; key: hash of (action, target, value) represented as (string-ascii 64)
-;; We use a simple (action, target) pair since only one pending op
-;; per action+target is allowed at a time.
 (define-map pending-op-by-action-target
   { action: (string-ascii 64), target: principal }
-  uint  ;; operation-id
+  uint
 )
 
-;; ============================================================
-;; READ-ONLY
-;; ============================================================
+;; Read-only
 
 (define-read-only (get-operation (op-id uint))
   (map-get? operations op-id)
@@ -108,10 +76,7 @@
   )
 )
 
-(define-read-only (get-pending-op-id
-  (action (string-ascii 64))
-  (target principal)
-)
+(define-read-only (get-pending-op-id (action (string-ascii 64)) (target principal))
   (map-get? pending-op-by-action-target { action: action, target: target })
 )
 
@@ -119,22 +84,14 @@
   (var-get default-delay)
 )
 
-;; ============================================================
-;; PRIVATE HELPERS
-;; ============================================================
+;; Private helpers
 
 (define-private (assert-owner)
   (ok (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED))
 )
 
-;; ============================================================
-;; PUBLIC FUNCTIONS
-;; ============================================================
+;; Public functions
 
-;; -----------------------------------------------------------
-;; QUEUE an operation
-;; delay = 0 -> use default-delay
-;; -----------------------------------------------------------
 (define-public (queue
   (action (string-ascii 64))
   (target principal)
@@ -144,22 +101,17 @@
   (begin
     (try! (assert-owner))
 
-    ;; Resolve actual delay
     (let (
       (actual-delay (if (is-eq delay u0) (var-get default-delay) delay))
     )
-      ;; Validate delay bounds
       (asserts! (>= actual-delay MIN-DELAY) ERR-DELAY-TOO-SHORT)
       (asserts! (<= actual-delay MAX-DELAY) ERR-DELAY-TOO-SHORT)
-
-      ;; No duplicate pending op for same action+target
       (asserts!
         (is-none (map-get? pending-op-by-action-target { action: action, target: target }))
         ERR-ALREADY-QUEUED
       )
 
       (let ((op-id (var-get op-nonce)))
-        ;; Store operation
         (map-set operations op-id {
           action: action,
           target: target,
@@ -170,7 +122,6 @@
           cancelled: false,
           proposer: tx-sender
         })
-        ;; Track pending
         (map-set pending-op-by-action-target
           { action: action, target: target }
           op-id
@@ -192,12 +143,6 @@
   )
 )
 
-;; -----------------------------------------------------------
-;; EXECUTE a matured operation
-;; Returns the operation data for the caller to act on.
-;; The caller (vault-aggregator or owner script) reads action/value
-;; and calls the appropriate setter.
-;; -----------------------------------------------------------
 (define-public (execute (op-id uint))
   (begin
     (try! (assert-owner))
@@ -206,18 +151,13 @@
         (begin
           (asserts! (not (get executed op)) ERR-ALREADY-EXECUTED)
           (asserts! (not (get cancelled op)) ERR-NOT-QUEUED)
-          ;; Must be past ready-at
           (asserts! (>= block-height (get ready-at op)) ERR-NOT-READY)
-          ;; Must not have expired past grace period
           (asserts!
             (< block-height (+ (get ready-at op) GRACE-PERIOD))
             ERR-EXPIRED
           )
 
-          ;; Mark executed
           (map-set operations op-id (merge op { executed: true }))
-
-          ;; Clear pending index
           (map-delete pending-op-by-action-target
             { action: (get action op), target: (get target op) }
           )
@@ -238,9 +178,6 @@
   )
 )
 
-;; -----------------------------------------------------------
-;; CANCEL a queued operation (before execution)
-;; -----------------------------------------------------------
 (define-public (cancel (op-id uint))
   (begin
     (try! (assert-owner))
@@ -251,8 +188,6 @@
           (asserts! (not (get cancelled op)) ERR-NOT-QUEUED)
 
           (map-set operations op-id (merge op { cancelled: true }))
-
-          ;; Clear pending index
           (map-delete pending-op-by-action-target
             { action: (get action op), target: (get target op) }
           )
@@ -270,10 +205,6 @@
   )
 )
 
-;; -----------------------------------------------------------
-;; ADMIN: update default delay (itself subject to a timelock queue
-;; in production - here owner can set directly for bootstrap)
-;; -----------------------------------------------------------
 (define-public (set-default-delay (new-delay uint))
   (begin
     (try! (assert-owner))

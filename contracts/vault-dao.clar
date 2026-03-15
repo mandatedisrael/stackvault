@@ -1,16 +1,9 @@
-;; ============================================================
 ;; STACKVAULT - vault-dao.clar
 ;; Role-based access control: owner, admins (3-of-5 multisig),
 ;; guardian (instant pause), operator (yield harvester)
-;; ============================================================
-
-;; ============================================================
-;; CONSTANTS
-;; ============================================================
 
 (define-constant CONTRACT-OWNER tx-sender)
 
-;; Error codes
 (define-constant ERR-NOT-AUTHORIZED     (err u200))
 (define-constant ERR-ALREADY-MEMBER     (err u201))
 (define-constant ERR-NOT-MEMBER         (err u202))
@@ -21,65 +14,37 @@
 (define-constant ERR-MAX-ADMINS         (err u207))
 (define-constant ERR-ZERO-ADDRESS       (err u208))
 
-;; Max number of admin signers
 (define-constant MAX-ADMINS u5)
-
-;; Minimum quorum (out of MAX-ADMINS)
 (define-constant MIN-QUORUM u3)
-
-;; Proposal TTL: ~2 days in blocks (288 blocks/day)
 (define-constant PROPOSAL-TTL u576)
 
-;; ============================================================
-;; DATA VARS
-;; ============================================================
-
-;; Current required quorum for multisig proposals
 (define-data-var required-quorum uint MIN-QUORUM)
-
-;; Admin count
 (define-data-var admin-count uint u0)
-
-;; Proposal nonce
 (define-data-var proposal-nonce uint u0)
 
-;; ============================================================
-;; DATA MAPS
-;; ============================================================
-
-;; Admin roster (up to MAX-ADMINS)
 (define-map admins principal bool)
-
-;; Guardian - can instantly pause the vault
 (define-map guardians principal bool)
-
-;; Operator - can call harvest-yield
 (define-map operators principal bool)
 
-;; Multisig proposals
-;; A proposal encodes a target action as a buff identifier
 (define-map proposals
-  uint  ;; proposal-id
+  uint
   {
-    action: (string-ascii 64),   ;; human-readable action tag
-    target: principal,           ;; subject of the action
-    value: uint,                 ;; optional uint parameter
+    action: (string-ascii 64),
+    target: principal,
+    value: uint,
     proposer: principal,
-    created-at: uint,            ;; block height
+    created-at: uint,
     executed: bool,
     approvals: uint
   }
 )
 
-;; Track which admins have approved which proposals
 (define-map proposal-approvals
   { proposal-id: uint, admin: principal }
   bool
 )
 
-;; ============================================================
-;; READ-ONLY
-;; ============================================================
+;; Read-only
 
 (define-read-only (is-admin (who principal))
   (default-to false (map-get? admins who))
@@ -109,9 +74,7 @@
   (var-get admin-count)
 )
 
-;; ============================================================
-;; PRIVATE HELPERS
-;; ============================================================
+;; Private helpers
 
 (define-private (assert-owner)
   (ok (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED))
@@ -128,11 +91,8 @@
   ))
 )
 
-;; ============================================================
-;; OWNER BOOTSTRAP - called once at deploy
-;; ============================================================
+;; Owner bootstrap
 
-;; Owner can seed the first admins directly
 (define-public (add-admin (who principal))
   (begin
     (try! (assert-owner))
@@ -156,7 +116,6 @@
   )
 )
 
-;; Owner can assign / revoke guardian role
 (define-public (set-guardian (who principal) (enabled bool))
   (begin
     (try! (assert-owner))
@@ -169,7 +128,6 @@
   )
 )
 
-;; Owner can assign / revoke operator role
 (define-public (set-operator (who principal) (enabled bool))
   (begin
     (try! (assert-owner))
@@ -182,11 +140,8 @@
   )
 )
 
-;; ============================================================
-;; MULTISIG PROPOSALS
-;; ============================================================
+;; Multisig proposals
 
-;; Admin proposes an action (e.g. "set-fee-bps", "set-operator", ...)
 (define-public (propose
   (action (string-ascii 64))
   (target principal)
@@ -202,7 +157,7 @@
         proposer: tx-sender,
         created-at: block-height,
         executed: false,
-        approvals: u1   ;; proposer auto-approves
+        approvals: u1
       })
       (map-set proposal-approvals { proposal-id: id, admin: tx-sender } true)
       (var-set proposal-nonce (+ id u1))
@@ -219,7 +174,6 @@
   )
 )
 
-;; Admin approves an existing proposal
 (define-public (approve (proposal-id uint))
   (begin
     (try! (assert-admin))
@@ -252,8 +206,6 @@
   )
 )
 
-;; Execute a proposal once quorum is reached
-;; Returns the proposal data for the caller to act on (off-chain or chained call)
 (define-public (execute (proposal-id uint))
   (begin
     (try! (assert-admin))
@@ -266,7 +218,6 @@
             ERR-PROPOSAL-EXPIRED
           )
           (asserts! (>= (get approvals proposal) (var-get required-quorum)) ERR-QUORUM-NOT-MET)
-          ;; Mark executed
           (map-set proposals proposal-id (merge proposal { executed: true }))
           (print {
             event: "proposal-executed",
@@ -282,12 +233,8 @@
   )
 )
 
-;; ============================================================
-;; GUARDIAN EMERGENCY ACTIONS
-;; ============================================================
+;; Guardian emergency
 
-;; Guardian (or owner) can emit an emergency pause signal
-;; The vault-aggregator checks is-guardian via inter-contract call
 (define-public (emergency-pause-signal)
   (begin
     (try! (assert-guardian-or-owner))
@@ -296,9 +243,7 @@
   )
 )
 
-;; ============================================================
-;; QUORUM MANAGEMENT (owner only)
-;; ============================================================
+;; Quorum management
 
 (define-public (set-quorum (q uint))
   (begin

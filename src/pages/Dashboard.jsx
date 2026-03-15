@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useWallet } from '../context/WalletContext'
+import { VaultProvider } from '../context/VaultContext'
 import DashboardNav from '../components/dashboard/DashboardNav'
 import HeroStats from '../components/dashboard/HeroStats'
 import PositionHealth from '../components/dashboard/PositionHealth'
@@ -39,39 +40,44 @@ function ConnectPrompt() {
   )
 }
 
+function DashboardContent() {
+  return (
+    <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 py-10">
+      {/* Top 3-column stat row */}
+      <HeroStats />
+
+      {/* Main layout: left (actions) | right (loop + activity) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8">
+        {/* Left column */}
+        <div className="flex flex-col gap-8">
+          <PositionHealth />
+          <ActionTabs />
+        </div>
+
+        {/* Right column */}
+        <div className="flex flex-col gap-8">
+          <ActiveLoop />
+          <RecentActivity />
+        </div>
+      </div>
+    </main>
+  )
+}
+
 export default function Dashboard() {
   const { isConnected } = useWallet()
 
   return (
-    <div className="text-brand-slate font-body w-full min-h-screen flex flex-col">
-      <DashboardNav />
+    <VaultProvider>
+      <div className="text-brand-slate font-body w-full min-h-screen flex flex-col">
+        <DashboardNav />
 
-      {!isConnected ? (
-        <ConnectPrompt />
-      ) : (
-        <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 py-10">
-
-          {/* Top 3-column stat row */}
-          <HeroStats />
-
-          {/* Main layout: left (actions) | right (loop + activity) */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8">
-
-            {/* Left column */}
-            <div className="flex flex-col gap-8">
-              <PositionHealth />
-              <ActionTabs />
-            </div>
-
-            {/* Right column */}
-            <div className="flex flex-col gap-8">
-              <ActiveLoop />
-              <RecentActivity />
-            </div>
-
-          </div>
-        </main>
-      )}
-    </div>
+        {!isConnected ? (
+          <ConnectPrompt />
+        ) : (
+          <DashboardContent />
+        )}
+      </div>
+    </VaultProvider>
   )
 }

@@ -1,0 +1,56 @@
+id: 0
+name: Testnet deployment
+network: testnet
+stacks-node: https://api.testnet.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332
+plan:
+  batches:
+  - id: 0
+    transactions:
+    - transaction-type: contract-publish
+      contract-name: vault-math
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      cost: 4659636
+      path: contracts/vault-math.clar
+      anchor-block-only: true
+      clarity-version: 2
+    - transaction-type: contract-publish
+      contract-name: vault-dao
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      cost: 4665705
+      path: contracts/vault-dao.clar
+      anchor-block-only: true
+      clarity-version: 2
+    - transaction-type: contract-publish
+      contract-name: vault-oracle
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      cost: 4658877
+      path: contracts/vault-oracle.clar
+      anchor-block-only: true
+      clarity-version: 2
+    - transaction-type: contract-publish
+      contract-name: vault-timelock
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      cost: 4663429
+      path: contracts/vault-timelock.clar
+      anchor-block-only: true
+      clarity-version: 2
+    - transaction-type: contract-publish
+      contract-name: vault-aggregator
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      cost: 4685430
+      path: contracts/vault-aggregator.clar
+      anchor-block-only: true
+      clarity-version: 2
+    epoch: '2.5'
+  - id: 1
+    transactions:
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.vault-aggregator
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: set-whitelisted-token
+      parameters:
+      - "'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+      cost: 1000000
+      anchor-block-only: true
+    epoch: '2.5'

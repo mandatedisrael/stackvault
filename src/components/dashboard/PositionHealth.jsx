@@ -1,15 +1,57 @@
-const metrics = [
-  { label: 'Collateral', value: '0.50000000 sBTC', sub: '≈ $42,500', icon: 'ph-cube' },
-  { label: 'Borrowed', value: '$19,125 USDCx', sub: '45% LTV', icon: 'ph-coins' },
-  { label: 'Liq. Price', value: '$24,285', sub: 'BTC/USD', icon: 'ph-warning' },
-  { label: 'Borrow APR', value: '4.8%', sub: 'Variable', icon: 'ph-percent' },
-]
+import { useVault } from '../../context/VaultContext'
+import { formatSbtc, formatUsd, PRECISION } from '../../lib/contracts'
 
 export default function PositionHealth() {
-  const ltv = 45
+  const { userShares, userAssetValue, btcPrice, loading } = useVault()
+
+  const hasPosition = userAssetValue > 0n
+
+  // Collateral value in USD
+  const collateralUsd = btcPrice > 0n ? (userAssetValue * btcPrice) / BigInt(PRECISION) : 0n
+
+  // For now, borrowing is not live on-chain (Zest integration is scaffolded)
+  // Show actual collateral data but mock borrow state as 0
+  const borrowedUsd = 0n
+  const ltv = hasPosition && collateralUsd > 0n
+    ? Number((borrowedUsd * 10000n) / collateralUsd) / 100
+    : 0
+
   const ltvColor = ltv < 60 ? 'bg-brand-teal' : ltv < 75 ? 'bg-brand-yellow' : 'bg-red-500'
-  const healthLabel = ltv < 60 ? 'HEALTHY' : ltv < 75 ? 'MODERATE' : 'AT RISK'
-  const healthColor = ltv < 60 ? 'text-brand-teal' : ltv < 75 ? 'text-brand-yellow' : 'text-red-500'
+  const healthLabel = !hasPosition ? 'NO POSITION' : ltv < 60 ? 'HEALTHY' : ltv < 75 ? 'MODERATE' : 'AT RISK'
+  const healthColor = !hasPosition ? 'text-brand-slate/40' : ltv < 60 ? 'text-brand-teal' : ltv < 75 ? 'text-brand-yellow' : 'text-red-500'
+
+  // Liquidation price: price at which LTV hits 85% (if there were debt)
+  // liqPrice = (debt * 1e8) / (collateral_sats * 0.85)
+  const liqPrice = hasPosition && borrowedUsd > 0n
+    ? formatUsd((borrowedUsd * BigInt(PRECISION)) / ((userAssetValue * 85n) / 100n))
+    : '--'
+
+  const metrics = [
+    {
+      label: 'Collateral',
+      value: loading ? '...' : hasPosition ? `${formatSbtc(userAssetValue)} sBTC` : '0.00000000 sBTC',
+      sub: hasPosition && btcPrice > 0n ? `~ ${formatUsd(collateralUsd)}` : '--',
+      icon: 'ph-cube',
+    },
+    {
+      label: 'Borrowed',
+      value: '$0 USDCx',
+      sub: hasPosition ? `${ltv}% LTV` : '--',
+      icon: 'ph-coins',
+    },
+    {
+      label: 'Liq. Price',
+      value: liqPrice,
+      sub: 'BTC/USD',
+      icon: 'ph-warning',
+    },
+    {
+      label: 'Borrow APR',
+      value: '4.8%',
+      sub: 'Variable',
+      icon: 'ph-percent',
+    },
+  ]
 
   return (
     <div className="neo-card p-6 mb-8">
@@ -21,7 +63,9 @@ export default function PositionHealth() {
           </div>
           <div>
             <h3 className="font-display font-bold text-xl text-brand-slate">Position Health</h3>
-            <p className="text-xs text-brand-slate/50 font-semibold">Live from Zest Protocol</p>
+            <p className="text-xs text-brand-slate/50 font-semibold">
+              {loading ? 'Loading...' : 'Live from StackVault contracts'}
+            </p>
           </div>
         </div>
         <span className={`font-mono font-bold text-sm border-[3px] border-current rounded-full px-3 py-1 ${healthColor}`}>
@@ -44,7 +88,7 @@ export default function PositionHealth() {
         {/* Zone labels */}
         <div className="flex justify-between mt-1.5 text-[10px] font-bold text-brand-slate/40 uppercase tracking-wider">
           <span>Safe &lt;60%</span>
-          <span>Caution 60–75%</span>
+          <span>Caution 60-75%</span>
           <span>Liquidation &gt;85%</span>
         </div>
       </div>

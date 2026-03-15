@@ -1,0 +1,28 @@
+id: 1
+name: Deploy mock sBTC faucet to testnet
+network: testnet
+stacks-node: https://api.testnet.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332
+plan:
+  batches:
+  - id: 0
+    transactions:
+    - transaction-type: contract-publish
+      contract-name: sbtc-token
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      cost: 4660000
+      path: contracts/sbtc-token-mock.clar
+      anchor-block-only: true
+      clarity-version: 2
+    epoch: '2.5'
+  - id: 1
+    transactions:
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.vault-aggregator
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: set-whitelisted-token
+      parameters:
+      - "'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.sbtc-token"
+      cost: 1000000
+      anchor-block-only: true
+    epoch: '2.5'

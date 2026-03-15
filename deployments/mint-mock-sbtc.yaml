@@ -1,0 +1,19 @@
+id: 2
+name: Mint mock sBTC to deployer
+network: testnet
+stacks-node: https://api.testnet.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332
+plan:
+  batches:
+  - id: 0
+    transactions:
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.sbtc-token
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: mint
+      parameters:
+      - u1000000000
+      - "'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T"
+      cost: 1000000
+      anchor-block-only: true
+    epoch: '2.5'

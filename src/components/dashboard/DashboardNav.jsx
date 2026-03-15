@@ -1,8 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useWallet } from '../../context/WalletContext'
+import { useVault } from '../../context/VaultContext'
+import { formatSbtc } from '../../lib/contracts'
 
 export default function DashboardNav() {
   const { isConnected, isConnecting, shortAddress, connect, disconnect } = useWallet()
+  const vault = useVault()
+
+  const sbtcDisplay = vault ? formatSbtc(vault.sbtcBalance) : '0.00000000'
 
   return (
     <nav className="bg-brand-bg border-b-[3px] border-brand-slate sticky top-0 z-50">
@@ -22,7 +27,7 @@ export default function DashboardNav() {
         {/* Center badge */}
         <div className="hidden md:flex items-center gap-2 bg-brand-teal/10 border-[3px] border-brand-teal rounded-full px-4 py-1.5">
           <div className="w-2 h-2 rounded-full bg-brand-teal animate-pulse-slow"></div>
-          <span className="text-xs font-bold font-display text-brand-teal uppercase tracking-wide">Stacks Mainnet</span>
+          <span className="text-xs font-bold font-display text-brand-teal uppercase tracking-wide">Stacks Testnet</span>
         </div>
 
         {/* Right: balance + wallet */}
@@ -30,7 +35,7 @@ export default function DashboardNav() {
           {isConnected && (
             <div className="hidden sm:flex flex-col items-end">
               <span className="text-[10px] font-extrabold text-brand-slate/50 tracking-widest uppercase">sBTC Balance</span>
-              <span className="font-mono font-bold text-brand-slate">0.00000000</span>
+              <span className="font-mono font-bold text-brand-slate">{sbtcDisplay}</span>
             </div>
           )}
 

@@ -40,9 +40,11 @@
 ;; Epoch length in blocks
 (define-constant EPOCH-LENGTH u144)
 
-;; sBTC token contract on mainnet (SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sbtc-token)
-;; Using SP... prefix -- update to mainnet SM... address at deploy via deployment plan
-(define-constant SBTC-TOKEN 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token)
+;; sBTC token contract -- set by owner after deploy for the target network
+;; Testnet: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+;; Mainnet: SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sbtc-token
+;; Default: deployer's own sbtc-token (for simnet/devnet testing)
+(define-data-var whitelisted-token principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token)
 
 ;; StackingDAO stSTXbtc contract (deposit endpoint)
 ;; Devnet: deployer address; mainnet: SP4SZE494VC2YC5JYG7AYFQ44F5Q4PYV7DVMDPBG.stacking-dao-core-v1
@@ -253,7 +255,7 @@
 ;; -----------------------------------------------------------
 ;; DEPOSIT
 ;; User deposits sBTC, receives vault shares.
-;; token must be the whitelisted sBTC contract (SBTC-TOKEN).
+;; token must be the whitelisted sBTC contract ((var-get whitelisted-token)).
 ;; -----------------------------------------------------------
 (define-public (deposit
   (amount uint)
@@ -262,7 +264,7 @@
 )
   (begin
     ;; Whitelist check: only accept the canonical sBTC token
-    (asserts! (is-eq (contract-of token) SBTC-TOKEN) ERR-NOT-AUTHORIZED)
+    (asserts! (is-eq (contract-of token) (var-get whitelisted-token)) ERR-NOT-AUTHORIZED)
 
     ;; Guards
     (try! (assert-not-paused))
@@ -333,7 +335,7 @@
 ;; -----------------------------------------------------------
 ;; WITHDRAW
 ;; User burns shares, receives sBTC back.
-;; token must be the whitelisted sBTC contract (SBTC-TOKEN).
+;; token must be the whitelisted sBTC contract ((var-get whitelisted-token)).
 ;; -----------------------------------------------------------
 (define-public (withdraw
   (shares uint)
@@ -342,7 +344,7 @@
 )
   (begin
     ;; Whitelist check
-    (asserts! (is-eq (contract-of token) SBTC-TOKEN) ERR-NOT-AUTHORIZED)
+    (asserts! (is-eq (contract-of token) (var-get whitelisted-token)) ERR-NOT-AUTHORIZED)
 
     ;; Guards
     (try! (assert-not-paused))
@@ -467,4 +469,19 @@
     (var-set fee-recipient recipient)
     (ok recipient)
   )
+)
+
+;; Update whitelisted token (owner-only, for network migration)
+(define-public (set-whitelisted-token (token principal))
+  (begin
+    (try! (assert-owner))
+    (var-set whitelisted-token token)
+    (print { event: "whitelisted-token-updated", token: token })
+    (ok token)
+  )
+)
+
+;; Read the current whitelisted token
+(define-read-only (get-whitelisted-token)
+  (var-get whitelisted-token)
 )

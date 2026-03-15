@@ -1,55 +1,79 @@
-const steps = [
-  {
-    num: '01',
-    icon: 'ph-arrow-circle-down',
-    iconColor: 'text-brand-yellow',
-    iconBg: 'bg-brand-yellow/20',
-    title: 'Deposit sBTC',
-    sub: 'Your BTC enters the vault',
-    badge: 'ACTIVE',
-    badgeColor: 'bg-brand-teal text-white',
-  },
-  {
-    num: '02',
-    icon: 'ph-stack',
-    iconColor: 'text-brand-teal',
-    iconBg: 'bg-brand-teal/20',
-    title: 'StackingDAO',
-    sub: 'Earns stSTXbtc yield ~8.5%',
-    badge: 'LOCKED',
-    badgeColor: 'bg-brand-slate text-white',
-  },
-  {
-    num: '03',
-    icon: 'ph-bank',
-    iconColor: 'text-purple-500',
-    iconBg: 'bg-purple-100',
-    title: 'Zest Protocol',
-    sub: 'stSTXbtc used as collateral',
-    badge: 'LOCKED',
-    badgeColor: 'bg-brand-slate text-white',
-  },
-  {
-    num: '04',
-    icon: 'ph-currency-circle-dollar',
-    iconColor: 'text-brand-slate',
-    iconBg: 'bg-brand-beige',
-    title: 'USDCx Liquidity',
-    sub: 'Spendable without selling',
-    badge: 'AVAILABLE',
-    badgeColor: 'bg-brand-yellow text-brand-slate',
-  },
-]
+import { useVault } from '../../context/VaultContext'
+import { formatSbtc, formatUsd, PRECISION } from '../../lib/contracts'
 
 export default function ActiveLoop() {
+  const { userAssetValue, btcPrice, userShares, loading } = useVault()
+
+  const hasPosition = userAssetValue > 0n
+
+  // Estimate annual yield: 14.2% combined APY on user's collateral
+  const apyBps = 1420n // 14.2%
+  const annualYieldSats = hasPosition ? (userAssetValue * apyBps) / 10000n : 0n
+  const annualYieldUsd = btcPrice > 0n ? (annualYieldSats * btcPrice) / BigInt(PRECISION) : 0n
+
+  // Step badges reflect user state
+  const depositBadge = hasPosition ? 'ACTIVE' : 'WAITING'
+  const depositBadgeColor = hasPosition ? 'bg-brand-teal text-white' : 'bg-brand-slate/20 text-brand-slate/50'
+
+  const steps = [
+    {
+      num: '01',
+      icon: 'ph-arrow-circle-down',
+      iconColor: 'text-brand-yellow',
+      iconBg: 'bg-brand-yellow/20',
+      title: 'Deposit sBTC',
+      sub: hasPosition ? `${formatSbtc(userAssetValue)} sBTC deposited` : 'Your BTC enters the vault',
+      badge: depositBadge,
+      badgeColor: depositBadgeColor,
+    },
+    {
+      num: '02',
+      icon: 'ph-stack',
+      iconColor: 'text-brand-teal',
+      iconBg: 'bg-brand-teal/20',
+      title: 'StackingDAO',
+      sub: 'Earns stSTXbtc yield ~8.5%',
+      badge: hasPosition ? 'LOCKED' : 'PENDING',
+      badgeColor: hasPosition ? 'bg-brand-slate text-white' : 'bg-brand-slate/20 text-brand-slate/50',
+    },
+    {
+      num: '03',
+      icon: 'ph-bank',
+      iconColor: 'text-purple-500',
+      iconBg: 'bg-purple-100',
+      title: 'Zest Protocol',
+      sub: 'stSTXbtc used as collateral',
+      badge: hasPosition ? 'LOCKED' : 'PENDING',
+      badgeColor: hasPosition ? 'bg-brand-slate text-white' : 'bg-brand-slate/20 text-brand-slate/50',
+    },
+    {
+      num: '04',
+      icon: 'ph-currency-circle-dollar',
+      iconColor: 'text-brand-slate',
+      iconBg: 'bg-brand-beige',
+      title: 'USDCx Liquidity',
+      sub: 'Spendable without selling',
+      badge: hasPosition ? 'AVAILABLE' : 'PENDING',
+      badgeColor: hasPosition ? 'bg-brand-yellow text-brand-slate' : 'bg-brand-slate/20 text-brand-slate/50',
+    },
+  ]
+
+  const yieldDisplay = loading
+    ? '...'
+    : annualYieldUsd > 0n
+      ? `${formatUsd(annualYieldUsd)} / yr`
+      : '$0 / yr'
+
+  const apyDisplay = hasPosition ? '14.2% APY' : '-- APY'
+
   return (
     <div className="neo-card p-6 h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h3 className="font-display font-bold text-xl text-brand-slate">Active Loop</h3>
-        <span className="bg-brand-teal/20 text-brand-teal border-[2px] border-brand-teal rounded-full px-3 py-1 text-[10px] font-extrabold tracking-widest uppercase flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse-slow inline-block"></span>
-          AUTO-ROUTING
+        <span className={`border-[2px] rounded-full px-3 py-1 text-[10px] font-extrabold tracking-widest uppercase flex items-center gap-1.5 ${hasPosition ? 'bg-brand-teal/20 text-brand-teal border-brand-teal' : 'bg-brand-slate/10 text-brand-slate/40 border-brand-slate/20'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full inline-block ${hasPosition ? 'bg-brand-teal animate-pulse-slow' : 'bg-brand-slate/30'}`}></span>
+          {hasPosition ? 'AUTO-ROUTING' : 'INACTIVE'}
         </span>
       </div>
 
@@ -86,11 +110,13 @@ export default function ActiveLoop() {
       <div className="mt-5 bg-brand-yellow/20 border-[3px] border-brand-slate rounded-2xl p-4 flex items-center justify-between">
         <div>
           <p className="text-[10px] font-extrabold text-brand-slate/50 tracking-widest uppercase">Net Annual Yield</p>
-          <p className="font-display font-bold text-2xl text-brand-slate">$6,269 / yr</p>
+          <p className="font-display font-bold text-2xl text-brand-slate">{yieldDisplay}</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-extrabold text-brand-slate/50 tracking-widest uppercase">On 1 BTC</p>
-          <p className="font-display font-bold text-2xl text-brand-teal">14.2% APY</p>
+          <p className="text-[10px] font-extrabold text-brand-slate/50 tracking-widest uppercase">
+            {hasPosition ? `On ${formatSbtc(userAssetValue)} sBTC` : 'On your deposit'}
+          </p>
+          <p className="font-display font-bold text-2xl text-brand-teal">{apyDisplay}</p>
         </div>
       </div>
     </div>

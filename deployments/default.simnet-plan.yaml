@@ -39,9 +39,39 @@ plan:
   - id: 0
     transactions:
     - transaction-type: emulated-contract-publish
+      contract-name: vault-oracle
+      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+      path: contracts/vault-oracle.clar
+      clarity-version: 2
+    - transaction-type: emulated-contract-publish
+      contract-name: dex-mock
+      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+      path: contracts/dex-mock.clar
+      clarity-version: 2
+    - transaction-type: emulated-contract-publish
       contract-name: sbtc-token
       emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
       path: contracts/sbtc-token-mock.clar
+      clarity-version: 2
+    - transaction-type: emulated-contract-publish
+      contract-name: ststx-token-mock
+      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+      path: contracts/ststx-token-mock.clar
+      clarity-version: 2
+    - transaction-type: emulated-contract-publish
+      contract-name: stacking-dao-mock
+      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+      path: contracts/stacking-dao-mock.clar
+      clarity-version: 2
+    - transaction-type: emulated-contract-publish
+      contract-name: usdcx-token-mock
+      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+      path: contracts/usdcx-token-mock.clar
+      clarity-version: 2
+    - transaction-type: emulated-contract-publish
+      contract-name: zest-pool-mock
+      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+      path: contracts/zest-pool-mock.clar
       clarity-version: 2
     - transaction-type: emulated-contract-publish
       contract-name: vault-aggregator
@@ -57,11 +87,6 @@ plan:
       contract-name: vault-math
       emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
       path: contracts/vault-math.clar
-      clarity-version: 2
-    - transaction-type: emulated-contract-publish
-      contract-name: vault-oracle
-      emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
-      path: contracts/vault-oracle.clar
       clarity-version: 2
     - transaction-type: emulated-contract-publish
       contract-name: vault-timelock

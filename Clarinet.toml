@@ -1,12 +1,22 @@
 [project]
 name = "stackvault"
-description = "StackVault — non-custodial sBTC vault aggregator chaining StackingDAO + Zest Protocol + USDCx"
+description = "StackVault - non-custodial sBTC vault aggregator chaining StackingDAO + Zest Protocol + USDCx"
 authors = ["mandatedisrael"]
 telemetry = false
 cache_dir = "./.cache"
 
 [contracts.sbtc-token]
 path = "contracts/sbtc-token-mock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.ststx-token-mock]
+path = "contracts/ststx-token-mock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.usdcx-token-mock]
+path = "contracts/usdcx-token-mock.clar"
 clarity_version = 2
 epoch = "2.5"
 
@@ -27,6 +37,21 @@ epoch = "2.5"
 
 [contracts.vault-timelock]
 path = "contracts/vault-timelock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.stacking-dao-mock]
+path = "contracts/stacking-dao-mock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.zest-pool-mock]
+path = "contracts/zest-pool-mock.clar"
+clarity_version = 2
+epoch = "2.5"
+
+[contracts.dex-mock]
+path = "contracts/dex-mock.clar"
 clarity_version = 2
 epoch = "2.5"
 

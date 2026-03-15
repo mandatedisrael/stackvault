@@ -2,16 +2,17 @@ import { useVault } from '../../context/VaultContext'
 import { formatSbtc, formatUsd, PRECISION } from '../../lib/contracts'
 
 export default function PositionHealth() {
-  const { userShares, userAssetValue, btcPrice, loading } = useVault()
+  const { userShares, userAssetValue, btcPrice, loopState, loading } = useVault()
 
   const hasPosition = userAssetValue > 0n
 
   // Collateral value in USD
   const collateralUsd = btcPrice > 0n ? (userAssetValue * btcPrice) / BigInt(PRECISION) : 0n
 
-  // For now, borrowing is not live on-chain (Zest integration is scaffolded)
-  // Show actual collateral data but mock borrow state as 0
-  const borrowedUsd = 0n
+  // USDCx debt from on-chain loop state (6 decimals) - convert to 8-decimal USD for display
+  const usdcxDebt6 = loopState.usdcxDebt ?? 0n
+  const borrowedUsd = usdcxDebt6 * 100n // 6 decimals -> 8 decimals (multiply by 100)
+
   const ltv = hasPosition && collateralUsd > 0n
     ? Number((borrowedUsd * 10000n) / collateralUsd) / 100
     : 0
@@ -26,6 +27,8 @@ export default function PositionHealth() {
     ? formatUsd((borrowedUsd * BigInt(PRECISION)) / ((userAssetValue * 85n) / 100n))
     : '--'
 
+  const formatUsdcx = (val) => (Number(val) / 1_000_000).toFixed(2)
+
   const metrics = [
     {
       label: 'Collateral',
@@ -35,8 +38,8 @@ export default function PositionHealth() {
     },
     {
       label: 'Borrowed',
-      value: '$0 USDCx',
-      sub: hasPosition ? `${ltv}% LTV` : '--',
+      value: usdcxDebt6 > 0n ? `$${formatUsdcx(usdcxDebt6)} USDCx` : '$0 USDCx',
+      sub: hasPosition ? `${ltv.toFixed(1)}% LTV` : '--',
       icon: 'ph-coins',
     },
     {

@@ -74,6 +74,7 @@ export function useContractData(stxAddress) {
     sbtcBalance: 0n,    // user's sBTC wallet balance (sats)
     stxBalance: 0n,     // user's STX balance (micro-STX)
     isPaused: false,
+    loopState: { idleSbtc: 0n, ststxCollateral: 0n, usdcxDebt: 0n, sbtcDeployed: 0n, iterations: 0n },
     loading: true,
     error: null,
   })
@@ -84,23 +85,24 @@ export function useContractData(stxAddress) {
     try {
       // Build batch of read-only calls
       const calls = [
-        readOnly(CONTRACTS.aggregator, 'get-total-assets'),
-        readOnly(CONTRACTS.aggregator, 'get-total-shares'),
-        readOnly(CONTRACTS.aggregator, 'get-share-price'),
-        readOnly(CONTRACTS.aggregator, 'is-paused'),
+        readOnly(CONTRACTS.aggregator, 'get-total-assets'),    // 0
+        readOnly(CONTRACTS.aggregator, 'get-total-shares'),    // 1
+        readOnly(CONTRACTS.aggregator, 'get-share-price'),     // 2
+        readOnly(CONTRACTS.aggregator, 'is-paused'),           // 3
+        readOnly(CONTRACTS.aggregator, 'get-loop-state'),      // 4
       ]
 
       // User-specific calls
       if (stxAddress) {
         calls.push(
-          readOnly(CONTRACTS.aggregator, 'get-position', [principalCV(stxAddress)]),
-          fetchSbtcBalance(stxAddress),
-          fetchStxBalance(stxAddress),
+          readOnly(CONTRACTS.aggregator, 'get-position', [principalCV(stxAddress)]), // 5
+          fetchSbtcBalance(stxAddress),  // 6
+          fetchStxBalance(stxAddress),   // 7
         )
       }
 
       // Oracle price - try-get-btc-price returns (optional uint), won't revert
-      calls.push(readOnly(CONTRACTS.oracle, 'try-get-btc-price'))
+      calls.push(readOnly(CONTRACTS.oracle, 'try-get-btc-price')) // 8 (with user) or 5 (without)
 
       const results = await Promise.allSettled(calls)
 
@@ -119,26 +121,35 @@ export function useContractData(stxAddress) {
       const pausedCV = getValue(3)
       const isPaused = pausedCV?.type === 0x03 ? true : pausedCV?.value === true
 
+      // Loop state (tuple)
+      const loopRaw = extractTuple(getValue(4))
+      const loopState = {
+        idleSbtc: loopRaw['idle-sbtc'] ?? 0n,
+        ststxCollateral: loopRaw['ststx-collateral'] ?? 0n,
+        usdcxDebt: loopRaw['usdcx-debt'] ?? 0n,
+        sbtcDeployed: loopRaw['sbtc-deployed'] ?? 0n,
+        iterations: loopRaw['iterations'] ?? 0n,
+      }
+
       let userShares = 0n, userAssetValue = 0n, userDeposited = 0n
       let sbtcBalance = 0n, stxBalance = 0n
 
       if (stxAddress) {
-        const positionCV = getValue(4)
+        const positionCV = getValue(5)
         const position = extractTuple(positionCV)
         userShares = position.shares ?? 0n
         userAssetValue = position['asset-value'] ?? 0n
         userDeposited = position.deposited ?? 0n
 
-        // fetchSbtcBalance returns bigint directly (not a CV)
-        const sbtcResult = results[5]
+        const sbtcResult = results[6]
         sbtcBalance = sbtcResult?.status === 'fulfilled' ? sbtcResult.value : 0n
 
-        const stxResult = results[6]
+        const stxResult = results[7]
         stxBalance = stxResult?.status === 'fulfilled' ? stxResult.value : 0n
       }
 
       // Oracle price
-      const oracleIdx = stxAddress ? 7 : 4
+      const oracleIdx = stxAddress ? 8 : 5
       const btcPriceOpt = extractOptionalUint(getValue(oracleIdx))
       const btcPrice = btcPriceOpt ?? 0n
       const btcPriceFresh = btcPriceOpt !== null
@@ -155,6 +166,7 @@ export function useContractData(stxAddress) {
         sbtcBalance,
         stxBalance,
         isPaused,
+        loopState,
         loading: false,
         error: null,
       })

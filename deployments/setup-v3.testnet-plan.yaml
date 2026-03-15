@@ -1,0 +1,45 @@
+id: 0
+name: Setup minters, whitelisted token, and operator for vault-aggregator-v3
+network: testnet
+stacks-node: https://api.testnet.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332
+plan:
+  batches:
+  - id: 0
+    transactions:
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.ststx-token-mock
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: set-minter
+      parameters:
+      - "'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.stacking-dao-mock"
+      - "true"
+      cost: 1000000
+      anchor-block-only: true
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.usdcx-token-mock
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: set-minter
+      parameters:
+      - "'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.zest-pool-mock"
+      - "true"
+      cost: 1000000
+      anchor-block-only: true
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.vault-aggregator-v3
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: set-whitelisted-token
+      parameters:
+      - "'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.sbtc-token"
+      cost: 1000000
+      anchor-block-only: true
+    - transaction-type: contract-call
+      contract-id: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T.vault-aggregator-v3
+      expected-sender: ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T
+      method: set-operator
+      parameters:
+      - "'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T"
+      - "true"
+      cost: 1000000
+      anchor-block-only: true
+    epoch: '2.5'

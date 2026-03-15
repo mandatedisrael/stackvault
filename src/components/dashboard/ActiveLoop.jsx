@@ -2,18 +2,43 @@ import { useVault } from '../../context/VaultContext'
 import { formatSbtc, formatUsd, PRECISION } from '../../lib/contracts'
 
 export default function ActiveLoop() {
-  const { userAssetValue, btcPrice, userShares, loading } = useVault()
+  const { userAssetValue, btcPrice, userShares, loopState, loading } = useVault()
 
   const hasPosition = userAssetValue > 0n
+  const loopActive = loopState.iterations > 0n
 
   // Estimate annual yield: 14.2% combined APY on user's collateral
   const apyBps = 1420n // 14.2%
   const annualYieldSats = hasPosition ? (userAssetValue * apyBps) / 10000n : 0n
   const annualYieldUsd = btcPrice > 0n ? (annualYieldSats * btcPrice) / BigInt(PRECISION) : 0n
 
-  // Step badges reflect user state
+  // Step badges reflect real on-chain loop state
   const depositBadge = hasPosition ? 'ACTIVE' : 'WAITING'
   const depositBadgeColor = hasPosition ? 'bg-brand-teal text-white' : 'bg-brand-slate/20 text-brand-slate/50'
+
+  const stackingBadge = loopActive ? 'LOCKED' : hasPosition ? 'READY' : 'PENDING'
+  const stackingBadgeColor = loopActive ? 'bg-brand-slate text-white' : 'bg-brand-slate/20 text-brand-slate/50'
+
+  const zestBadge = loopActive ? 'LOCKED' : hasPosition ? 'READY' : 'PENDING'
+  const zestBadgeColor = loopActive ? 'bg-brand-slate text-white' : 'bg-brand-slate/20 text-brand-slate/50'
+
+  const usdcxBadge = loopState.usdcxDebt > 0n ? 'BORROWED' : hasPosition ? 'READY' : 'PENDING'
+  const usdcxBadgeColor = loopState.usdcxDebt > 0n ? 'bg-brand-yellow text-brand-slate' : 'bg-brand-slate/20 text-brand-slate/50'
+
+  // Format collateral/debt for subtitles
+  const collateralSub = loopActive
+    ? `${formatSbtc(loopState.ststxCollateral)} stSTX locked`
+    : 'Earns stSTX yield ~8.5%'
+
+  const zestSub = loopActive
+    ? `${formatSbtc(loopState.ststxCollateral)} stSTX collateral`
+    : 'stSTX used as collateral'
+
+  // USDCx has 6 decimals
+  const formatUsdcx = (val) => (Number(val) / 1_000_000).toFixed(2)
+  const usdcxSub = loopState.usdcxDebt > 0n
+    ? `${formatUsdcx(loopState.usdcxDebt)} USDCx borrowed`
+    : 'Borrow against collateral'
 
   const steps = [
     {
@@ -32,9 +57,9 @@ export default function ActiveLoop() {
       iconColor: 'text-brand-teal',
       iconBg: 'bg-brand-teal/20',
       title: 'StackingDAO',
-      sub: 'Earns stSTXbtc yield ~8.5%',
-      badge: hasPosition ? 'LOCKED' : 'PENDING',
-      badgeColor: hasPosition ? 'bg-brand-slate text-white' : 'bg-brand-slate/20 text-brand-slate/50',
+      sub: collateralSub,
+      badge: stackingBadge,
+      badgeColor: stackingBadgeColor,
     },
     {
       num: '03',
@@ -42,9 +67,9 @@ export default function ActiveLoop() {
       iconColor: 'text-purple-500',
       iconBg: 'bg-purple-100',
       title: 'Zest Protocol',
-      sub: 'stSTXbtc used as collateral',
-      badge: hasPosition ? 'LOCKED' : 'PENDING',
-      badgeColor: hasPosition ? 'bg-brand-slate text-white' : 'bg-brand-slate/20 text-brand-slate/50',
+      sub: zestSub,
+      badge: zestBadge,
+      badgeColor: zestBadgeColor,
     },
     {
       num: '04',
@@ -52,9 +77,9 @@ export default function ActiveLoop() {
       iconColor: 'text-brand-slate',
       iconBg: 'bg-brand-beige',
       title: 'USDCx Liquidity',
-      sub: 'Spendable without selling',
-      badge: hasPosition ? 'AVAILABLE' : 'PENDING',
-      badgeColor: hasPosition ? 'bg-brand-yellow text-brand-slate' : 'bg-brand-slate/20 text-brand-slate/50',
+      sub: usdcxSub,
+      badge: usdcxBadge,
+      badgeColor: usdcxBadgeColor,
     },
   ]
 
@@ -65,15 +90,16 @@ export default function ActiveLoop() {
       : '$0 / yr'
 
   const apyDisplay = hasPosition ? '14.2% APY' : '-- APY'
+  const iterDisplay = loopActive ? `${Number(loopState.iterations)} loop${loopState.iterations > 1n ? 's' : ''}` : 'No loops'
 
   return (
     <div className="neo-card p-6 h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h3 className="font-display font-bold text-xl text-brand-slate">Active Loop</h3>
-        <span className={`border-[2px] rounded-full px-3 py-1 text-[10px] font-extrabold tracking-widest uppercase flex items-center gap-1.5 ${hasPosition ? 'bg-brand-teal/20 text-brand-teal border-brand-teal' : 'bg-brand-slate/10 text-brand-slate/40 border-brand-slate/20'}`}>
-          <span className={`w-1.5 h-1.5 rounded-full inline-block ${hasPosition ? 'bg-brand-teal animate-pulse-slow' : 'bg-brand-slate/30'}`}></span>
-          {hasPosition ? 'AUTO-ROUTING' : 'INACTIVE'}
+        <span className={`border-[2px] rounded-full px-3 py-1 text-[10px] font-extrabold tracking-widest uppercase flex items-center gap-1.5 ${loopActive ? 'bg-brand-teal/20 text-brand-teal border-brand-teal' : hasPosition ? 'bg-brand-yellow/20 text-brand-yellow border-brand-yellow' : 'bg-brand-slate/10 text-brand-slate/40 border-brand-slate/20'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full inline-block ${loopActive ? 'bg-brand-teal animate-pulse-slow' : hasPosition ? 'bg-brand-yellow' : 'bg-brand-slate/30'}`}></span>
+          {loopActive ? `${iterDisplay} ACTIVE` : hasPosition ? 'DEPOSITED' : 'INACTIVE'}
         </span>
       </div>
 

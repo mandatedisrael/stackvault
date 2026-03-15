@@ -24,23 +24,15 @@ const SBTC_ASSET_NAME = 'sbtc-token'
 /**
  * Build post-conditions for a deposit:
  * - User sends exactly `amount` sBTC to the vault contract
+ *
+ * Note: We use PostConditionMode.Allow because the auto-loop moves sBTC,
+ * stSTX, and USDCx through multiple contracts (StackingDAO, Zest, DEX).
+ * The user-facing post-condition ensures they only send what they intend.
  */
 function depositPostConditions(senderAddress, amount) {
   return [
     Pc.principal(senderAddress)
       .willSendEq(amount)
-      .ft(`${sbtcParts.contractAddress}.${sbtcParts.contractName}`, SBTC_ASSET_NAME),
-  ]
-}
-
-/**
- * Build post-conditions for a withdrawal:
- * - Vault contract sends at most `maxAssets` sBTC back to user
- */
-function withdrawPostConditions(maxAssets) {
-  return [
-    Pc.principal(CONTRACTS.aggregator)
-      .willSendLte(maxAssets)
       .ft(`${sbtcParts.contractAddress}.${sbtcParts.contractName}`, SBTC_ASSET_NAME),
   ]
 }
@@ -65,7 +57,7 @@ export function useTransactions(stxAddress, onSuccess) {
           uintCV(0),            // min-shares (0 = no slippage protection for simplicity)
           sbtcCV,               // token trait
         ],
-        postConditionMode: PostConditionMode.Deny,
+        postConditionMode: PostConditionMode.Allow,
         postConditions: depositPostConditions(stxAddress, amountSats),
         network: NETWORK,
         onFinish: (result) => {
@@ -90,9 +82,8 @@ export function useTransactions(stxAddress, onSuccess) {
       const aggParts = splitContract(CONTRACTS.aggregator)
       const sbtcCV = contractPrincipalCV(sbtcParts.contractAddress, sbtcParts.contractName)
 
-      // Estimate max assets for post-condition (shares * sharePrice / PRECISION, with buffer)
-      const maxAssetsPC = minAssets > 0n ? minAssets * 2n : shares // generous upper bound
-
+      // Auto-unwind moves sBTC, stSTX, and USDCx through multiple contracts.
+      // We use PostConditionMode.Allow to permit all internal token movements.
       await openContractCall({
         contractAddress: aggParts.contractAddress,
         contractName: aggParts.contractName,
@@ -102,8 +93,8 @@ export function useTransactions(stxAddress, onSuccess) {
           uintCV(minAssets),    // min-assets (slippage protection)
           sbtcCV,               // token trait
         ],
-        postConditionMode: PostConditionMode.Deny,
-        postConditions: withdrawPostConditions(maxAssetsPC),
+        postConditionMode: PostConditionMode.Allow,
+        postConditions: [],
         network: NETWORK,
         onFinish: (result) => {
           setTxStatus({ type: 'withdraw', loading: false, txId: result.txId, error: null })

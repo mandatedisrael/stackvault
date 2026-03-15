@@ -1,6 +1,7 @@
 ;; STACKVAULT - vault-aggregator.clar
-;; Core vault with leveraged yield loop: sBTC -> StackingDAO -> Zest -> DEX -> repeat
-;; Deposit/withdraw handle share accounting. Operator executes loop steps.
+;; Core vault with AUTO leveraged yield loop: sBTC -> StackingDAO -> Zest -> DEX -> repeat
+;; User deposits and the loop executes automatically (up to 3 iterations).
+;; No operator needed for deposit/withdraw flow.
 
 (define-constant CONTRACT-OWNER tx-sender)
 
@@ -19,12 +20,15 @@
 (define-constant ERR-NO-LOOP-TO-UNWIND     (err u113))
 (define-constant ERR-UNWIND-FIRST          (err u114))
 (define-constant ERR-ORACLE-FAIL           (err u115))
+(define-constant ERR-LOOP-STEP-FAILED      (err u116))
+(define-constant ERR-UNWIND-FAILED         (err u117))
 
 (define-constant PRECISION u100000000)
 (define-constant TVL-CAP u50000000000)
 (define-constant USER-CAP u1000000000)
 (define-constant MIN-FIRST-DEPOSIT u100000)
 (define-constant MAX-LOOP-ITERATIONS u3)
+(define-constant BORROW-PCT u38)
 
 (define-data-var whitelisted-token principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token)
 
@@ -35,14 +39,14 @@
 (define-data-var protocol-fee-bps uint u50)
 (define-data-var fee-recipient principal CONTRACT-OWNER)
 
-;; Loop state (global, aggregated across all deposits)
+;; Loop state
 (define-data-var idle-sbtc uint u0)
 (define-data-var loop-ststx-collateral uint u0)
 (define-data-var loop-usdcx-debt uint u0)
 (define-data-var loop-sbtc-deployed uint u0)
 (define-data-var loop-iterations uint u0)
 
-;; Operator whitelist
+;; Operator whitelist (kept as fallback)
 (define-map operators principal bool)
 
 (define-map user-shares principal uint)
@@ -60,7 +64,7 @@
   )
 )
 
-;; Read-only functions
+;; ---- Read-only functions ----
 
 (define-read-only (get-shares (user principal))
   (default-to u0 (map-get? user-shares user))
@@ -147,7 +151,11 @@
   )
 )
 
-;; Private helpers
+(define-read-only (get-whitelisted-token)
+  (var-get whitelisted-token)
+)
+
+;; ---- Private helpers ----
 
 (define-private (assert-not-paused)
   (ok (asserts! (not (var-get vault-paused)) ERR-PAUSED))
@@ -164,13 +172,175 @@
 (define-private (apply-fee (amount uint))
   (let (
     (fee (/ (* amount (var-get protocol-fee-bps)) u10000))
-    (net (- amount fee))
   )
-    net
+    (- amount fee)
   )
 )
 
-;; Public: deposit sBTC into the vault
+;; ---- Auto-loop: single iteration logic ----
+;; This private function executes ONE loop iteration using hardcoded contract refs.
+;; It is called by fold to run up to MAX_LOOP_ITERATIONS times.
+;; The accumulator is { sbtc: uint, ok: bool }.
+;; If ok is false (a previous step failed or sbtc is too small), it skips.
+
+(define-private (do-one-loop-iteration
+  (idx uint)
+  (acc { sbtc: uint, ok: bool })
+)
+  (if (or (not (get ok acc)) (< (get sbtc acc) u1000))
+    acc
+    (let (
+      (sbtc-amount (get sbtc acc))
+      (btc-price-result (contract-call? .vault-oracle get-btc-price))
+    )
+      (match btc-price-result
+        btc-price
+        (let (
+          (borrow-amount (/ (* (* sbtc-amount btc-price) BORROW-PCT) (* (* PRECISION u100) u100)))
+        )
+          (if (< borrow-amount u1)
+            { sbtc: u0, ok: true }
+            (let (
+              (ststx-result (as-contract
+                (contract-call? .stacking-dao-mock deposit-sbtc sbtc-amount .sbtc-token)
+              ))
+            )
+              (match ststx-result
+                ststx-received
+                (let (
+                  (supply-result (as-contract
+                    (contract-call? .zest-pool-mock supply-collateral ststx-received .ststx-token-mock)
+                  ))
+                )
+                  (match supply-result
+                    supply-ok
+                    (let (
+                      (borrow-result (as-contract
+                        (contract-call? .zest-pool-mock borrow borrow-amount)
+                      ))
+                    )
+                      (match borrow-result
+                        borrow-ok
+                        (let (
+                          (swap-result (as-contract
+                            (contract-call? .dex-mock swap-usdcx-to-sbtc borrow-amount u0 .usdcx-token-mock .sbtc-token)
+                          ))
+                        )
+                          (match swap-result
+                            sbtc-received
+                            (begin
+                              (var-set idle-sbtc (- (+ (var-get idle-sbtc) sbtc-received) sbtc-amount))
+                              (var-set loop-ststx-collateral (+ (var-get loop-ststx-collateral) ststx-received))
+                              (var-set loop-usdcx-debt (+ (var-get loop-usdcx-debt) borrow-amount))
+                              (var-set loop-sbtc-deployed (+ (var-get loop-sbtc-deployed) sbtc-amount))
+                              (var-set loop-iterations (+ (var-get loop-iterations) u1))
+                              (print {
+                                event: "auto-loop-iteration",
+                                iteration: (var-get loop-iterations),
+                                sbtc-in: sbtc-amount,
+                                ststx-minted: ststx-received,
+                                usdcx-borrowed: borrow-amount,
+                                sbtc-received: sbtc-received
+                              })
+                              { sbtc: sbtc-received, ok: true }
+                            )
+                            swap-err { sbtc: u0, ok: false }
+                          )
+                        )
+                        borrow-err { sbtc: u0, ok: false }
+                      )
+                    )
+                    supply-err { sbtc: u0, ok: false }
+                  )
+                )
+                ststx-err { sbtc: u0, ok: false }
+              )
+            )
+          )
+        )
+        price-err { sbtc: u0, ok: false }
+      )
+    )
+  )
+)
+
+;; ---- Auto-unwind: single step logic ----
+;; Unwinds the entire loop in one call. Since we have max 3 iterations,
+;; the accumulated state can be unwound in a single step.
+
+(define-private (do-unwind-all)
+  (let (
+    (current-debt (var-get loop-usdcx-debt))
+    (current-collateral (var-get loop-ststx-collateral))
+    (current-idle (var-get idle-sbtc))
+  )
+    (if (is-eq (var-get loop-iterations) u0)
+      (ok true)
+      (begin
+        ;; Step 1: Swap idle sBTC -> USDCx to repay debt
+        (if (and (> current-debt u0) (> current-idle u0))
+          (let (
+            (usdcx-received (try! (as-contract
+              (contract-call? .dex-mock swap-sbtc-to-usdcx current-idle u0 .sbtc-token .usdcx-token-mock)
+            )))
+            (repay-amount (if (> current-debt usdcx-received) usdcx-received current-debt))
+          )
+            (try! (as-contract
+              (contract-call? .zest-pool-mock repay repay-amount .usdcx-token-mock)
+            ))
+            (var-set idle-sbtc u0)
+            true
+          )
+          true
+        )
+
+        ;; Step 2: Withdraw stSTX collateral from Zest
+        (if (> current-collateral u0)
+          (begin
+            (try! (as-contract
+              (contract-call? .zest-pool-mock withdraw-collateral current-collateral .ststx-token-mock)
+            ))
+            true
+          )
+          true
+        )
+
+        ;; Step 3: Unstake stSTX -> get sBTC back
+        (if (> current-collateral u0)
+          (let (
+            (sbtc-returned (try! (as-contract
+              (contract-call? .stacking-dao-mock withdraw-sbtc current-collateral .sbtc-token)
+            )))
+          )
+            (var-set idle-sbtc (+ (var-get idle-sbtc) sbtc-returned))
+            true
+          )
+          true
+        )
+
+        ;; Reset loop state
+        (var-set loop-ststx-collateral u0)
+        (var-set loop-usdcx-debt u0)
+        (var-set loop-sbtc-deployed u0)
+        (var-set loop-iterations u0)
+
+        (print {
+          event: "auto-unwind",
+          debt-repaid: current-debt,
+          collateral-withdrawn: current-collateral,
+          idle-sbtc: (var-get idle-sbtc)
+        })
+
+        (ok true)
+      )
+    )
+  )
+)
+
+;; ---- Public: deposit sBTC + auto-loop ----
+;; User deposits sBTC and the yield loop executes automatically.
+;; The loop runs up to 3 iterations via fold.
+
 (define-public (deposit
   (amount uint)
   (min-shares uint)
@@ -196,12 +366,14 @@
       )
         (asserts! (>= shares-to-mint min-shares) ERR-SLIPPAGE)
 
+        ;; Update share accounting
         (map-set user-shares tx-sender (+ (get-shares tx-sender) shares-to-mint))
         (map-set user-deposited tx-sender user-total)
         (var-set total-assets (+ (var-get total-assets) amount))
         (var-set total-shares (+ (var-get total-shares) shares-to-mint))
         (var-set idle-sbtc (+ (var-get idle-sbtc) amount))
 
+        ;; Transfer sBTC from user to vault
         (try! (contract-call? token transfer amount tx-sender (as-contract tx-sender) none))
 
         (print {
@@ -210,18 +382,33 @@
           amount: amount,
           shares-minted: shares-to-mint,
           total-assets: (var-get total-assets),
-          total-shares: (var-get total-shares),
-          idle-sbtc: (var-get idle-sbtc)
+          total-shares: (var-get total-shares)
         })
 
-        (ok shares-to-mint)
+        ;; AUTO-LOOP: execute up to 3 iterations using fold
+        (let (
+          (loop-result (fold do-one-loop-iteration
+            (list u1 u2 u3)
+            { sbtc: amount, ok: true }
+          ))
+        )
+          (print {
+            event: "auto-loop-complete",
+            final-idle-sbtc: (var-get idle-sbtc),
+            loop-iterations: (var-get loop-iterations),
+            loop-ok: (get ok loop-result)
+          })
+
+          (ok shares-to-mint)
+        )
       )
     )
   )
 )
 
-;; Public: withdraw sBTC from the vault
-;; Requires enough idle sBTC. If loop is active, operator must unwind first.
+;; ---- Public: withdraw sBTC with auto-unwind ----
+;; If loop is active, automatically unwinds before returning sBTC.
+
 (define-public (withdraw
   (shares uint)
   (min-assets uint)
@@ -243,6 +430,14 @@
         (fee-amount (- gross-assets net-assets))
       )
         (asserts! (>= net-assets min-assets) ERR-SLIPPAGE)
+
+        ;; Auto-unwind if not enough idle sBTC
+        (if (< (var-get idle-sbtc) gross-assets)
+          (try! (do-unwind-all))
+          true
+        )
+
+        ;; After unwind, check we have enough idle sBTC
         (asserts! (>= (var-get idle-sbtc) gross-assets) ERR-UNWIND-FIRST)
 
         (let ((user tx-sender))
@@ -286,8 +481,8 @@
   )
 )
 
-;; Operator: execute one loop iteration
-;; Takes idle sBTC -> StackingDAO (get stSTX) -> Zest (supply collateral + borrow USDCx) -> DEX (swap to sBTC)
+;; ---- Operator functions (fallback / manual control) ----
+
 (define-public (execute-loop-step
   (sbtc-amount uint)
   (sbtc-token <sip010-trait>)
@@ -304,27 +499,21 @@
     (let (
       (caller tx-sender)
       (btc-price (unwrap! (contract-call? .vault-oracle get-btc-price) ERR-ORACLE-FAIL))
-      ;; Borrow 38% of sBTC value in USDCx (6 decimals)
-      ;; usdcx = sbtc-amount * btc-price * 38 / (PRECISION * 100 * 100)
-      (borrow-amount (/ (* (* sbtc-amount btc-price) u38) (* (* PRECISION u100) u100)))
+      (borrow-amount (/ (* (* sbtc-amount btc-price) BORROW-PCT) (* (* PRECISION u100) u100)))
     )
-      ;; Step 1: sBTC -> StackingDAO -> stSTX
       (let (
         (ststx-received (try! (as-contract
           (contract-call? .stacking-dao-mock deposit-sbtc sbtc-amount sbtc-token)
         )))
       )
-        ;; Step 2: stSTX -> Zest as collateral
         (try! (as-contract
           (contract-call? .zest-pool-mock supply-collateral ststx-received ststx-token)
         ))
 
-        ;; Step 3: Borrow USDCx from Zest
         (try! (as-contract
           (contract-call? .zest-pool-mock borrow borrow-amount)
         ))
 
-        ;; Step 4: Swap USDCx -> sBTC via DEX
         (let (
           (sbtc-received (try! (as-contract
             (contract-call? .dex-mock swap-usdcx-to-sbtc borrow-amount u0 usdcx-token sbtc-token)
@@ -359,8 +548,6 @@
   )
 )
 
-;; Operator: unwind the entire loop
-;; Swap sBTC -> USDCx to repay debt -> withdraw stSTX -> unstake -> get sBTC back
 (define-public (unwind-loop-step
   (sbtc-token <sip010-trait>)
   (ststx-token <sip010-trait>)
@@ -370,74 +557,13 @@
     (try! (assert-operator))
     (try! (assert-not-paused))
     (asserts! (> (var-get loop-iterations) u0) ERR-NO-LOOP-TO-UNWIND)
-
-    (let (
-      (caller tx-sender)
-      (current-debt (var-get loop-usdcx-debt))
-      (current-collateral (var-get loop-ststx-collateral))
-      (current-idle (var-get idle-sbtc))
-    )
-      ;; Step 1: Swap idle sBTC -> USDCx and repay debt
-      (if (and (> current-debt u0) (> current-idle u0))
-        (let (
-          (usdcx-received (try! (as-contract
-            (contract-call? .dex-mock swap-sbtc-to-usdcx current-idle u0 sbtc-token usdcx-token)
-          )))
-          (repay-amount (if (> current-debt usdcx-received) usdcx-received current-debt))
-        )
-          (try! (as-contract
-            (contract-call? .zest-pool-mock repay repay-amount usdcx-token)
-          ))
-          (var-set idle-sbtc u0)
-          true
-        )
-        true
-      )
-
-      ;; Step 2: Withdraw stSTX collateral from Zest
-      (if (> current-collateral u0)
-        (begin
-          (try! (as-contract
-            (contract-call? .zest-pool-mock withdraw-collateral current-collateral ststx-token)
-          ))
-          true
-        )
-        true
-      )
-
-      ;; Step 3: Unstake stSTX -> get sBTC back
-      (if (> current-collateral u0)
-        (let (
-          (sbtc-returned (try! (as-contract
-            (contract-call? .stacking-dao-mock withdraw-sbtc current-collateral sbtc-token)
-          )))
-        )
-          (var-set idle-sbtc (+ (var-get idle-sbtc) sbtc-returned))
-          true
-        )
-        true
-      )
-
-      ;; Reset loop state
-      (var-set loop-ststx-collateral u0)
-      (var-set loop-usdcx-debt u0)
-      (var-set loop-sbtc-deployed u0)
-      (var-set loop-iterations u0)
-
-      (print {
-        event: "loop-unwound",
-        debt-repaid: current-debt,
-        collateral-withdrawn: current-collateral,
-        idle-sbtc: (var-get idle-sbtc),
-        operator: caller
-      })
-
-      (ok true)
-    )
+    (try! (do-unwind-all))
+    (ok true)
   )
 )
 
-;; Owner: harvest yield (increase total-assets to reflect accrued yield)
+;; ---- Owner: harvest yield ----
+
 (define-public (harvest-yield (yield-amount uint))
   (begin
     (try! (assert-owner))
@@ -458,7 +584,7 @@
   )
 )
 
-;; Admin functions
+;; ---- Admin functions ----
 
 (define-public (set-paused (paused bool))
   (begin
@@ -503,8 +629,4 @@
     (print { event: "operator-updated", operator: who, enabled: enabled })
     (ok true)
   )
-)
-
-(define-read-only (get-whitelisted-token)
-  (var-get whitelisted-token)
 )

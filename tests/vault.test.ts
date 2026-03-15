@@ -796,10 +796,22 @@ describe("yield-loop", () => {
     simnet.callPublicFn(VAULT, "set-operator", [Cl.principal(deployer), Cl.bool(true)], deployer);
   });
 
-  it("deposit tracks idle-sbtc correctly", () => {
+  it("deposit auto-loops and idle-sbtc is remainder after iterations", () => {
     simnet.callPublicFn(VAULT, "deposit", [Cl.uint(ONE_SBTC), Cl.uint(0n), sbtcContract], wallet1);
+
+    // After auto-loop (3 iterations), idle-sbtc should be much less than deposited amount
     const idle = simnet.callReadOnlyFn(VAULT, "get-idle-sbtc", [], deployer);
-    expect(idle.result).toBeUint(ONE_SBTC);
+    const idleValue = (idle.result as any).value;
+    expect(idleValue < ONE_SBTC).toBe(true);
+    expect(idleValue > 0n).toBe(true);
+
+    // Loop iterations should be 3 (MAX_LOOP_ITERATIONS)
+    const loopState = simnet.callReadOnlyFn(VAULT, "get-loop-state", [], deployer);
+    const stateData = (loopState.result as any).data || (loopState.result as any).value;
+    expect(stateData.iterations.value).toBe(3n);
+    expect(stateData["ststx-collateral"].value > 0n).toBe(true);
+    expect(stateData["usdcx-debt"].value > 0n).toBe(true);
+    expect(stateData["sbtc-deployed"].value > 0n).toBe(true);
   });
 
   it("non-operator cannot execute loop", () => {
@@ -833,23 +845,24 @@ describe("yield-loop", () => {
     expect(stateData["usdcx-debt"].value > 0n).toBe(true);
   });
 
-  it("execute-loop-step: cannot exceed MAX_LOOP_ITERATIONS", () => {
+  it("execute-loop-step: fails after auto-loop exhausts iterations", () => {
     mintSbtc(wallet1, ONE_SBTC * 10n);
     simnet.callPublicFn(VAULT, "deposit", [Cl.uint(ONE_SBTC * 5n), Cl.uint(0n), sbtcContract], wallet1);
 
-    // Execute 3 loop steps (MAX_LOOP_ITERATIONS = 3)
-    simnet.callPublicFn(VAULT, "execute-loop-step", [Cl.uint(ONE_SBTC), sbtcContract, ststxContract, usdcxContract], deployer);
-    simnet.callPublicFn(VAULT, "execute-loop-step", [Cl.uint(ONE_SBTC), sbtcContract, ststxContract, usdcxContract], deployer);
-    simnet.callPublicFn(VAULT, "execute-loop-step", [Cl.uint(ONE_SBTC), sbtcContract, ststxContract, usdcxContract], deployer);
+    // Deposit already auto-looped 3 times, so iterations = 3
+    const loopState = simnet.callReadOnlyFn(VAULT, "get-loop-state", [], deployer);
+    const stateData = (loopState.result as any).data || (loopState.result as any).value;
+    expect(stateData.iterations.value).toBe(3n);
 
-    // 4th should fail
+    // Manual execute-loop-step should fail (idle is too small after auto-loop)
     const { result } = simnet.callPublicFn(
       VAULT,
       "execute-loop-step",
       [Cl.uint(ONE_SBTC), sbtcContract, ststxContract, usdcxContract],
       deployer
     );
-    expect(result).toBeErr(Cl.uint(112));
+    // Fails with ERR-NO-IDLE-SBTC (u110) because auto-loop consumed most idle sBTC
+    expect(result).toBeErr(Cl.uint(110));
   });
 
   it("unwind-loop-step: operator can unwind the loop", () => {
@@ -882,47 +895,53 @@ describe("yield-loop", () => {
     expect(result).toBeErr(Cl.uint(113));
   });
 
-  it("withdraw fails if loop is active and not enough idle sBTC", () => {
+  it("withdraw auto-unwinds when loop is active", () => {
     simnet.callPublicFn(VAULT, "deposit", [Cl.uint(ONE_SBTC), Cl.uint(0n), sbtcContract], wallet1);
-    // Execute loop — this will consume the idle sBTC
-    simnet.callPublicFn(VAULT, "execute-loop-step", [Cl.uint(ONE_SBTC), sbtcContract, ststxContract, usdcxContract], deployer);
 
-    // The idle sBTC is now only the leftover from the DEX swap (much less than 1 sBTC)
-    // Try to withdraw full amount — should fail with ERR-UNWIND-FIRST
+    // After deposit, auto-loop is active (iterations > 0)
+    const loopBefore = simnet.callReadOnlyFn(VAULT, "get-loop-state", [], deployer);
+    const stateBefore = (loopBefore.result as any).data || (loopBefore.result as any).value;
+    expect(stateBefore.iterations.value > 0n).toBe(true);
+
+    // Withdraw should auto-unwind and succeed (not fail with ERR-UNWIND-FIRST)
     const { result } = simnet.callPublicFn(
       VAULT,
       "withdraw",
       [Cl.uint(ONE_SBTC), Cl.uint(0n), sbtcContract],
       wallet1
     );
-    expect(result).toBeErr(Cl.uint(114));
+    expect(result).toBeOk(Cl.uint(99_500_000n));
+
+    // Loop state should be reset after auto-unwind
+    const loopAfter = simnet.callReadOnlyFn(VAULT, "get-loop-state", [], deployer);
+    const stateAfter = (loopAfter.result as any).data || (loopAfter.result as any).value;
+    expect(stateAfter.iterations.value).toBe(0n);
+    expect(stateAfter["ststx-collateral"].value).toBe(0n);
+    expect(stateAfter["usdcx-debt"].value).toBe(0n);
   });
 
-  it("full cycle: deposit -> loop -> unwind -> withdraw", () => {
-    // Deposit
-    simnet.callPublicFn(VAULT, "deposit", [Cl.uint(ONE_SBTC), Cl.uint(0n), sbtcContract], wallet1);
+  it("full cycle: deposit auto-loops -> withdraw auto-unwinds", () => {
+    // Deposit (auto-loops 3 iterations)
+    const depositResult = simnet.callPublicFn(VAULT, "deposit", [Cl.uint(ONE_SBTC), Cl.uint(0n), sbtcContract], wallet1);
+    expect(depositResult.result).toBeOk(Cl.uint(ONE_SBTC));
 
-    // Execute 1 loop
-    simnet.callPublicFn(VAULT, "execute-loop-step", [Cl.uint(ONE_SBTC), sbtcContract, ststxContract, usdcxContract], deployer);
+    // Verify auto-loop ran
+    const loopState = simnet.callReadOnlyFn(VAULT, "get-loop-state", [], deployer);
+    const stateData = (loopState.result as any).data || (loopState.result as any).value;
+    expect(stateData.iterations.value).toBe(3n);
 
-    // Unwind
-    simnet.callPublicFn(VAULT, "unwind-loop-step", [sbtcContract, ststxContract, usdcxContract], deployer);
-
-    // Verify idle sBTC is back (might be slightly less due to rounding)
-    const idle = simnet.callReadOnlyFn(VAULT, "get-idle-sbtc", [], deployer);
-    const idleValue = (idle.result as any).value;
-    // Should have most of the sBTC back (accounting for rounding)
-    expect(idleValue > 0n).toBe(true);
-
-    // Withdraw (user's shares = 1 sBTC worth of shares)
+    // Withdraw (auto-unwinds)
     const { result } = simnet.callPublicFn(
       VAULT,
       "withdraw",
       [Cl.uint(ONE_SBTC), Cl.uint(0n), sbtcContract],
       wallet1
     );
-    // This may fail if idle < total assets due to rounding — acceptable for demo
-    // We just verify the loop flow works end to end
-    expect(result).toHaveProperty("type");
+    expect(result).toBeOk(Cl.uint(99_500_000n));
+
+    // Verify loop is fully unwound
+    const loopAfter = simnet.callReadOnlyFn(VAULT, "get-loop-state", [], deployer);
+    const afterData = (loopAfter.result as any).data || (loopAfter.result as any).value;
+    expect(afterData.iterations.value).toBe(0n);
   });
 });

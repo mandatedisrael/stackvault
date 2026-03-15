@@ -19,7 +19,7 @@ export const STACKS_API = 'https://api.testnet.hiro.so'
 export const DEPLOYER = 'ST2Q7YP8G3VW4HZ40R964B92TA4CCZP02017Y8Y3T'
 
 export const CONTRACTS = {
-  aggregator: `${DEPLOYER}.vault-aggregator-v3`,
+  aggregator: `${DEPLOYER}.vault-aggregator-v4`,
   math:       `${DEPLOYER}.vault-math`,
   oracle:     `${DEPLOYER}.vault-oracle`,
   dao:        `${DEPLOYER}.vault-dao`,
